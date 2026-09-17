@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>License Admin</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔑</text></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="logo">▶</span> <span id="app-name">VideoTranslate</span> <span class="muted">License admin</span></div>
+    <div id="who" class="who" hidden>
+      <span id="who-email" class="muted"></span>
+      <button id="logout" class="ghost small">Log out</button>
+    </div>
+  </header>
+
+  <!-- Sign in -->
+  <main id="login-view" class="center" hidden>
+    <form id="login-form" class="card narrow">
+      <h1>Sign in</h1>
+      <p class="muted">Use the admin account you created in Supabase.</p>
+      <label>Email <input id="login-email" type="email" autocomplete="username" required></label>
+      <label>Password <input id="login-password" type="password" autocomplete="current-password" required></label>
+      <button type="submit" class="primary">Sign in</button>
+      <p id="login-error" class="error" role="alert"></p>
+    </form>
+  </main>
+
+  <!-- Not configured -->
+  <main id="setup-view" class="center" hidden>
+    <div class="card narrow">
+      <h1>Almost there</h1>
+      <p>Open <code>web/config.js</code> and fill in your Supabase Project URL and anon key.</p>
+    </div>
+  </main>
+
+  <!-- Dashboard -->
+  <main id="app-view" hidden>
+    <section class="stats" id="stats"></section>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="licenses" role="tab">Licenses</button>
+      <button class="tab" data-tab="create" role="tab">Create keys</button>
+      <button class="tab" data-tab="trials" role="tab">Trials</button>
+    </nav>
+
+    <!-- Licenses -->
+    <section id="tab-licenses" class="tab-panel">
+      <div class="toolbar">
+        <input id="search" type="search" placeholder="Search key, customer, note or Machine ID…">
+        <select id="filter">
+          <option value="all">All</option>
+          <option value="active">Active</option>
+          <option value="unused">Not activated yet</option>
+          <option value="expired">Expired</option>
+          <option value="revoked">Cancelled</option>
+        </select>
+        <button id="reload" class="ghost">⟳ Reload</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Key</th><th>Plan</th><th>Customer</th><th>Status</th><th>Expires</th><th>PCs</th><th>Created</th><th></th></tr>
+          </thead>
+          <tbody id="license-rows"></tbody>
+        </table>
+      </div>
+      <p id="license-empty" class="muted empty" hidden>No licenses match.</p>
+    </section>
+
+    <!-- Create -->
+    <section id="tab-create" class="tab-panel" hidden>
+      <form id="create-form" class="card">
+        <div class="grid">
+          <label>Plan
+            <select id="c-plan">
+              <option value="pro">Pro — everything</option>
+              <option value="basic">Basic — batch, Download, Combine</option>
+            </select>
+          </label>
+          <label>Length
+            <select id="c-length">
+              <option value="30">1 month</option>
+              <option value="90">3 months</option>
+              <option value="180">6 months</option>
+              <option value="365" selected>1 year</option>
+              <option value="lifetime">Lifetime</option>
+              <option value="custom">Custom days…</option>
+              <option value="date">Until a date…</option>
+            </select>
+          </label>
+          <label id="c-days-wrap" hidden>Days <input id="c-days" type="number" min="1" value="30"></label>
+          <label id="c-date-wrap" hidden>Expires on <input id="c-date" type="date"></label>
+          <label>PCs per key <input id="c-machines" type="number" min="1" max="100" value="1"></label>
+          <label>How many keys <input id="c-count" type="number" min="1" max="100" value="1"></label>
+          <label class="wide">Customer <input id="c-customer" maxlength="120" placeholder="Name, phone, Telegram…"></label>
+          <label class="wide">Note <input id="c-note" maxlength="300" placeholder="Paid via ABA, order #123…"></label>
+        </div>
+        <label class="check"><input id="c-on-activation" type="checkbox" checked> Start counting days when the customer activates (not today)</label>
+        <button type="submit" class="primary">Create keys</button>
+        <p id="create-error" class="error" role="alert"></p>
+      </form>
+      <div id="created" class="card" hidden>
+        <div class="row-between">
+          <h2>New keys</h2>
+          <button id="copy-created" class="ghost small">Copy all</button>
+        </div>
+        <pre id="created-keys"></pre>
+      </div>
+    </section>
+
+    <!-- Trials -->
+    <section id="tab-trials" class="tab-panel" hidden>
+      <div class="toolbar">
+        <input id="trial-search" type="search" placeholder="Search Machine ID or PC name…">
+        <button id="trial-reload" class="ghost">⟳ Reload</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Machine ID</th><th>PC name</th><th>Started</th><th>Ends</th><th>Last seen</th><th></th></tr></thead>
+          <tbody id="trial-rows"></tbody>
+        </table>
+      </div>
+      <p id="trial-empty" class="muted empty" hidden>No trials yet.</p>
+    </section>
+  </main>
+
+  <dialog id="pcs-dialog">
+    <form method="dialog" class="dialog-body">
+      <div class="row-between"><h2>PCs using <span id="pcs-key" class="mono"></span></h2><button class="ghost small">Close</button></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>PC name</th><th>Machine ID</th><th>Activated</th><th>Last seen</th><th>Version</th><th></th></tr></thead>
+          <tbody id="pcs-rows"></tbody>
+        </table>
+      </div>
+      <p id="pcs-empty" class="muted empty" hidden>Not activated on any PC yet.</p>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="config.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
