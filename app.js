@@ -133,11 +133,12 @@ function renderStats() {
   const counts = { active: 0, unused: 0, expired: 0, revoked: 0 };
   let pcs = 0;
   for (const l of licenses) { counts[statusOf(l).key]++; pcs += l.activations.length; }
-  const trialDays = cfg.trialDays || 7;
-  const liveTrials = trials.filter((t) => new Date(t.started_at).getTime() + trialDays * DAY > Date.now()).length;
+  const liveTrials = trials.filter((t) => trialState(t).key === "running").length;
+  const waiting = trials.filter((t) => trialState(t).key === "pending").length;
   const stats = [
     [licenses.length, "Keys"], [counts.active, "Active keys"], [pcs, "Activated PCs"],
     [counts.unused, "Not activated yet"], [counts.expired, "Expired"], [liveTrials, "Trials running"],
+    [waiting, "Trial requests waiting"],
   ];
   $("stats").innerHTML = stats.map(([n, label]) => `<div class="stat"><b>${n}</b><span>${label}</span></div>`).join("");
 }
@@ -411,31 +412,69 @@ async function loadTrials() {
   renderStats();
 }
 
+// A trial is "pending" (the app asked, nobody approved yet), or "approved" and then
+// running until started_at + trialDays.
+function trialState(t) {
+  if ((t.status || "approved") !== "approved") return { key: "pending", label: "Waiting for approval", cls: "warn" };
+  const ends = new Date(new Date(t.started_at).getTime() + (cfg.trialDays || 7) * DAY);
+  return ends > new Date()
+    ? { key: "running", label: "Running", cls: "ok", ends }
+    : { key: "ended", label: "Ended", cls: "", ends };
+}
+
 function renderTrials() {
   const query = $("trial-search").value.trim().toLowerCase();
-  const trialDays = cfg.trialDays || 7;
-  const rows = trials.filter((t) => !query || `${t.machine_id} ${t.machine_name}`.toLowerCase().includes(query));
+  const filter = $("trial-filter").value;
+  const pending = trials.filter((t) => trialState(t).key === "pending").length;
+  $("pending-badge").hidden = pending === 0;
+  $("pending-badge").textContent = pending;
+
+  const rows = trials.filter((t) => (filter === "all" || trialState(t).key === filter)
+    && (!query || `${t.machine_id} ${t.machine_name}`.toLowerCase().includes(query)));
+  // Requests waiting for approval first.
+  rows.sort((a, b) => (trialState(a).key === "pending" ? 0 : 1) - (trialState(b).key === "pending" ? 0 : 1));
   $("trial-rows").innerHTML = rows.map((t) => {
-    const ends = new Date(new Date(t.started_at).getTime() + trialDays * DAY);
-    const live = ends > new Date();
+    const s = trialState(t);
+    const actions = s.key === "pending"
+      ? `<button class="primary small" data-trial="approve">Approve ${cfg.trialDays || 7} days</button>
+         <button class="ghost small danger" data-trial="delete">Decline</button>`
+      : `<button class="ghost small" data-trial="date">Set end date…</button>
+         <button class="ghost small" data-trial="restart">Restart trial</button>
+         <button class="ghost small danger" data-trial="end">End now</button>`;
     return `<tr data-id="${escapeHtml(t.machine_id)}">
       <td class="mono">${escapeHtml(t.machine_id)}</td>
       <td>${escapeHtml(t.machine_name)}</td>
+      <td><span class="pill ${s.cls}">${s.label}</span></td>
       <td>${fmtDate(t.started_at, true)}</td>
-      <td><span class="pill ${live ? "ok" : ""}">${fmtDate(ends)}</span></td>
+      <td>${s.ends ? fmtDate(s.ends) : '<span class="muted">—</span>'}</td>
       <td>${fmtDate(t.last_seen_at, true)}</td>
-      <td class="actions">
-        <button class="ghost small" data-trial="date">Set end date…</button>
-        <button class="ghost small" data-trial="restart">Restart trial</button>
-        <button class="ghost small danger" data-trial="end">End now</button>
-      </td>
+      <td class="actions">${actions}</td>
     </tr>`;
   }).join("");
   $("trial-empty").hidden = rows.length > 0;
 }
 
 $("trial-search").addEventListener("input", renderTrials);
+$("trial-filter").addEventListener("change", renderTrials);
 $("trial-reload").addEventListener("click", loadTrials);
+
+// Approve a Machine ID the customer pasted to you, whether or not they pressed "Request".
+$("trial-add").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const machine = $("trial-machine").value.trim().toUpperCase();
+  const existing = trials.find((t) => t.machine_id === machine);
+  if (existing && trialState(existing).key !== "pending"
+      && !confirm(`${machine} has had a trial already (${trialState(existing).label}). Start a new ${cfg.trialDays || 7}-day trial?`)) {
+    return;
+  }
+  const { error } = await db.from("trials").upsert(
+    { machine_id: machine, status: "approved", started_at: new Date().toISOString() },
+    { onConflict: "machine_id" });
+  if (error) return fail(error);
+  $("trial-machine").value = "";
+  toast(`Trial approved for ${machine}`);
+  loadTrials();
+});
 
 $("trial-rows").addEventListener("click", async (event) => {
   const button = event.target.closest("[data-trial]");
@@ -443,6 +482,21 @@ $("trial-rows").addEventListener("click", async (event) => {
   const machine = button.closest("tr").dataset.id;
   const trialDays = cfg.trialDays || 7;
   const trial = trials.find((t) => t.machine_id === machine);
+  if (button.dataset.trial === "approve") {
+    // The trial's days start now, not when it was requested.
+    const { error } = await db.from("trials")
+      .update({ status: "approved", started_at: new Date().toISOString() }).eq("machine_id", machine);
+    if (error) return fail(error);
+    toast(`Approved — ${trial.machine_name || machine} unlocks within a minute`);
+    return loadTrials();
+  }
+  if (button.dataset.trial === "delete") {
+    if (!confirm(`Decline the trial request from ${trial.machine_name || machine}?`)) return;
+    const { error } = await db.from("trials").delete().eq("machine_id", machine);
+    if (error) return fail(error);
+    toast("Request declined");
+    return loadTrials();
+  }
   let startedAt;
   let message;
   if (button.dataset.trial === "date") {

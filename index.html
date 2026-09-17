@@ -44,7 +44,7 @@
     <nav class="tabs" role="tablist">
       <button class="tab active" data-tab="licenses" role="tab">Licenses</button>
       <button class="tab" data-tab="create" role="tab">Create keys</button>
-      <button class="tab" data-tab="trials" role="tab">Trials</button>
+      <button class="tab" data-tab="trials" role="tab">Trials <span id="pending-badge" class="pill warn" hidden></span></button>
     </nav>
 
     <!-- Licenses -->
@@ -114,13 +114,26 @@
 
     <!-- Trials -->
     <section id="tab-trials" class="tab-panel" hidden>
+      <form id="trial-add" class="card trial-add">
+        <label class="wide">Give a free trial to a Machine ID the customer sent you
+          <input id="trial-machine" placeholder="e.g. 7F3A-91C2-0B4D-E5A8" autocomplete="off"
+                 pattern="[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}" required>
+        </label>
+        <button type="submit" class="primary">Approve trial</button>
+      </form>
       <div class="toolbar">
         <input id="trial-search" type="search" placeholder="Search Machine ID or PC name…">
+        <select id="trial-filter">
+          <option value="all">All</option>
+          <option value="pending">Waiting for approval</option>
+          <option value="running">Running</option>
+          <option value="ended">Ended</option>
+        </select>
         <button id="trial-reload" class="ghost">⟳ Reload</button>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Machine ID</th><th>PC name</th><th>Started</th><th>Ends</th><th>Last seen</th><th></th></tr></thead>
+          <thead><tr><th>Machine ID</th><th>PC name</th><th>Status</th><th>Requested / started</th><th>Ends</th><th>Last seen</th><th></th></tr></thead>
           <tbody id="trial-rows"></tbody>
         </table>
       </div>

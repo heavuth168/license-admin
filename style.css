@@ -93,6 +93,9 @@ dialog { border: 1px solid var(--border); border-radius: 14px; background: var(-
 dialog::backdrop { background: rgba(0, 0, 0, .45); }
 .dialog-body { padding: 18px; }
 #date-dialog { width: min(420px, calc(100vw - 32px)); }
+.trial-add { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-bottom: 12px; }
+.trial-add label { flex: 1 1 280px; }
+.trial-add input { font-family: Consolas, monospace; text-transform: uppercase; }
 .date-form { display: grid; gap: 12px; }
 .date-form p { margin: 0; }
 .quick { display: flex; flex-wrap: wrap; gap: 6px; }
