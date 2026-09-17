@@ -92,6 +92,11 @@ dialog { border: 1px solid var(--border); border-radius: 14px; background: var(-
   width: min(900px, calc(100vw - 32px)); padding: 0; }
 dialog::backdrop { background: rgba(0, 0, 0, .45); }
 .dialog-body { padding: 18px; }
+#date-dialog { width: min(420px, calc(100vw - 32px)); }
+.date-form { display: grid; gap: 12px; }
+.date-form p { margin: 0; }
+.quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.row-end { display: flex; justify-content: flex-end; gap: 8px; }
 
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--text);
   color: var(--bg); padding: 10px 16px; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.25); }

@@ -181,7 +181,9 @@ function renderLicenses() {
         <select data-action aria-label="Actions">
           <option value="">Actions…</option>
           <option value="pcs">View PCs</option>
+          <option value="setdate">Set expiry date…</option>
           <option value="extend">Add days…</option>
+          ${l.expires_at || l.duration_days ? '<option value="lifetime">Make lifetime</option>' : ""}
           <option value="machines">Change PC limit…</option>
           <option value="plan">Switch to ${l.plan === "pro" ? "Basic" : "Pro"}</option>
           <option value="customer">Edit customer / note…</option>
@@ -224,6 +226,26 @@ async function licenseAction(l, action) {
   switch (action) {
     case "pcs":
       return showPcs(l);
+    case "setdate": {
+      const current = l.expires_at
+        || (l.duration_days ? new Date(Date.now() + l.duration_days * DAY).toISOString() : null);
+      const status = statusOf(l);
+      const date = await askDate({
+        title: `Expiry date for ${l.key}`,
+        help: status.key === "expired"
+          ? `Expired on ${fmtDate(l.expires_at)}. Pick a new date and the customer can use it again.`
+          : l.expires_at ? `Now valid until ${fmtDate(l.expires_at)}.`
+          : l.duration_days ? `Not activated yet (${l.duration_days} days from activation). A date replaces that.`
+          : "Now lifetime. A date makes it expire.",
+        current,
+      });
+      if (!date) return;
+      return update(l, { expires_at: date, duration_days: null },
+        `Valid until ${fmtDate(date)}${l.status === "revoked" ? " (still cancelled — Restore it too)" : ""}`);
+    }
+    case "lifetime":
+      if (!confirm(`Make ${l.key} lifetime (never expires)?`)) return;
+      return update(l, { expires_at: null, duration_days: null }, "Now lifetime");
     case "extend": {
       const days = parseInt(prompt(`Add how many days to ${l.key}?`, "30"), 10);
       if (!days || days < 1) return;
@@ -268,6 +290,38 @@ async function licenseAction(l, action) {
       return loadLicenses();
     }
   }
+}
+
+// A date picker in a dialog. Resolves to an ISO time at the end of that day, or null.
+function askDate({ title, help, current }) {
+  const dialog = $("date-dialog");
+  const input = $("date-input");
+  $("date-title").textContent = title;
+  $("date-help").textContent = help || "";
+  const toInput = (d) => {
+    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60_000);
+    return local.toISOString().slice(0, 10);
+  };
+  const start = current ? new Date(current) : new Date();
+  input.value = toInput(start < new Date() ? new Date() : start);
+  input.min = toInput(new Date());
+
+  $("date-quick").onclick = (event) => {
+    const add = parseInt(event.target.dataset?.add, 10);
+    if (!add) return;
+    // Add to the current date, or to today if the key has already expired.
+    const base = current && new Date(current) > new Date() ? new Date(current) : new Date();
+    input.value = toInput(new Date(base.getTime() + add * DAY));
+  };
+
+  return new Promise((resolve) => {
+    dialog.onclose = () => {
+      if (dialog.returnValue !== "ok" || !input.value) return resolve(null);
+      resolve(new Date(`${input.value}T23:59:59`).toISOString());
+    };
+    dialog.returnValue = "";
+    dialog.showModal();
+  });
 }
 
 function showPcs(l) {
@@ -371,6 +425,7 @@ function renderTrials() {
       <td><span class="pill ${live ? "ok" : ""}">${fmtDate(ends)}</span></td>
       <td>${fmtDate(t.last_seen_at, true)}</td>
       <td class="actions">
+        <button class="ghost small" data-trial="date">Set end date…</button>
         <button class="ghost small" data-trial="restart">Restart trial</button>
         <button class="ghost small danger" data-trial="end">End now</button>
       </td>
@@ -387,12 +442,30 @@ $("trial-rows").addEventListener("click", async (event) => {
   if (!button) return;
   const machine = button.closest("tr").dataset.id;
   const trialDays = cfg.trialDays || 7;
-  const startedAt = button.dataset.trial === "restart"
-    ? new Date().toISOString()
-    : new Date(Date.now() - (trialDays + 1) * DAY).toISOString();
+  const trial = trials.find((t) => t.machine_id === machine);
+  let startedAt;
+  let message;
+  if (button.dataset.trial === "date") {
+    const ends = new Date(new Date(trial.started_at).getTime() + trialDays * DAY);
+    const date = await askDate({
+      title: "Trial end date",
+      help: `${trial.machine_name || machine} — now ends ${fmtDate(ends)}.`,
+      current: ends.toISOString(),
+    });
+    if (!date) return;
+    // The server works out the end as started_at + trial days, so move the start.
+    startedAt = new Date(new Date(date).getTime() - trialDays * DAY).toISOString();
+    message = `Trial ends ${fmtDate(date)}`;
+  } else if (button.dataset.trial === "restart") {
+    startedAt = new Date().toISOString();
+    message = "Trial restarted";
+  } else {
+    startedAt = new Date(Date.now() - (trialDays + 1) * DAY).toISOString();
+    message = "Trial ended";
+  }
   const { error } = await db.from("trials").update({ started_at: startedAt }).eq("machine_id", machine);
   if (error) return fail(error);
-  toast(button.dataset.trial === "restart" ? "Trial restarted" : "Trial ended");
+  toast(message);
   loadTrials();
 });
 

@@ -141,6 +141,24 @@
     </form>
   </dialog>
 
+  <dialog id="date-dialog">
+    <form method="dialog" class="dialog-body date-form">
+      <h2 id="date-title">Set expiry date</h2>
+      <p id="date-help" class="muted"></p>
+      <label>Date <input id="date-input" type="date" required></label>
+      <div class="quick" id="date-quick">
+        <button type="button" class="ghost small" data-add="7">+7 days</button>
+        <button type="button" class="ghost small" data-add="30">+1 month</button>
+        <button type="button" class="ghost small" data-add="90">+3 months</button>
+        <button type="button" class="ghost small" data-add="365">+1 year</button>
+      </div>
+      <div class="row-end">
+        <button value="cancel" formnovalidate class="ghost">Cancel</button>
+        <button value="ok" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
   <div id="toast" class="toast" role="status" hidden></div>
 
   <script src="config.js"></script>
